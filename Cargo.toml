@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 actix-web = "*"
+actix-service = "*"
 serde = { version = "*", features = ["derive"] }
 tokio = { version = "*", features = ["rt-multi-thread", "macros", "fs", "io-util"] }
 futures-util = "*"
