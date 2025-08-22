@@ -9,3 +9,10 @@ serde = { version = "*", features = ["derive"] }
 tokio = { version = "*", features = ["rt-multi-thread", "macros", "fs", "io-util"] }
 futures-util = "*"
 tokio-util = { version = "*", features = ["io"] }
+
+
+
+[dev-dependencies]
+reqwest = { version = "*", features = ["json"] }  # HTTP client for integration tests
+serde_json = "*"                                  # parse JSON from /objects listing
+tempfile = "*"                                    # temp dirs for isolated RUST_BUCKET_DIR
