@@ -1,4 +1,4 @@
-// health.rs
+// routes/health.rs
 
 use actix_web::{web, HttpResponse};
 
