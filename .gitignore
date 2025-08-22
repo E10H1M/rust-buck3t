@@ -1,0 +1,89 @@
+# ---- Rust / Cargo -----------------------------------------------------------
+
+# Build artifacts
+/target/
+debug/
+
+# Rustfmt backup files
+**/*.rs.bk
+
+# Windows PDBs (if someone builds on Windows)
+*.pdb
+
+# Cargo build plans (rare; ephemeral)
+*.cargo-lock.toml
+
+# If you are building a *library*, you may ignore Cargo.lock.
+# For apps/binaries you usually COMMIT Cargo.lock. Uncomment next line only for libs:
+Cargo.lock
+
+# ---- OUTPUT DIR ------------------------------------------
+/data
+# ---- Testing, Coverage, Profiling ------------------------------------------
+
+# LLVM source-based coverage
+*.profraw
+*.profdata
+
+# gcov / gcc coverage
+*.gcda
+*.gcno
+*.gcov
+
+# Rust coverage tool outputs
+coverage/
+lcov.info
+junit.xml
+tarpaulin-report.*
+grcov-report/
+
+# Perf and flamegraph
+perf.data*
+flamegraph.svg
+
+# Mutation testing (cargo-mutants)
+**/mutants.out*/
+
+# ---- Logs & local run artifacts --------------------------------------------
+
+*.log
+*.trace
+*.tmp
+*.bak
+*.old
+
+# ---- Environment / secrets --------------------------------------------------
+
+.env
+.env.*
+.envrc
+*.key
+*.pem
+
+# ---- Editors / IDEs ---------------------------------------------------------
+
+# VS Code: ignore workspace-local junk, keep useful project files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# JetBrains (if anyone uses it)
+.idea/
+*.iml
+
+# ctags / etags
+tags
+TAGS
+
+# Vim / Emacs swap/backup
+*~
+.*.swp
+.*.swo
+.#*
+
+# ---- OS cruft ---------------------------------------------------------------
+
+.DS_Store
+Thumbs.db
