@@ -10,14 +10,14 @@ use tokio::{
 };
 use tokio_util::io::ReaderStream;
 
-use crate::AppState;
+use crate::{AppState, consts::Config};
+use crate::consts::PATH_OBJECTS;
 
-// wire up the endpoints for this module
 pub(crate) fn init(cfg: &mut web::ServiceConfig) {
     cfg
-        .route("/objects", web::get().to(list_objects)) // NEW: list endpoint
+        .route(format!("/{}", PATH_OBJECTS).as_str(), web::get().to(list_objects))
         .service(
-            web::resource("/objects/{key:.+}") // was {key:.*} — now requires at least 1 char
+            web::resource(format!("/{}/{{key:.+}}", PATH_OBJECTS).as_str())
                 .route(web::put().to(put_object))
                 .route(web::head().to(head_object))
                 .route(web::get().to(get_object))
@@ -27,7 +27,6 @@ pub(crate) fn init(cfg: &mut web::ServiceConfig) {
 
 /* ---------- helpers (private) ---------- */
 
-// prevent path traversal
 fn resolve_key(root: &Path, key: &str) -> Option<PathBuf> {
     let mut cleaned = PathBuf::new();
     for comp in Path::new(key).components() {
@@ -39,7 +38,6 @@ fn resolve_key(root: &Path, key: &str) -> Option<PathBuf> {
     if cleaned.as_os_str().is_empty() { None } else { Some(root.join(cleaned)) }
 }
 
-// tiny content-type guesser
 fn guess_content_type(key: &str) -> &'static str {
     match Path::new(key).extension().and_then(|s| s.to_str()).map(|s| s.to_ascii_lowercase()) {
         Some(ref ext) if ext == "png" => "image/png",
@@ -60,7 +58,6 @@ fn guess_content_type(key: &str) -> &'static str {
     }
 }
 
-// weak etag (size + mtime)
 fn make_etag(meta: &std::fs::Metadata) -> String {
     let len = meta.len();
     let ts = meta.modified().ok()
@@ -70,32 +67,28 @@ fn make_etag(meta: &std::fs::Metadata) -> String {
     format!("W/\"{}-{}-{}\"", len, ts.0, ts.1)
 }
 
-// parse "bytes=start-", "bytes=start-end", or "bytes=-N" (suffix)
 fn parse_range(h: &str, total: u64) -> Option<(u64, u64)> {
     let s = h.trim();
     if !s.starts_with("bytes=") { return None; }
     let spec = &s[6..];
-    if spec.contains(',') { return None; } // single-range only
+    if spec.contains(',') { return None; }
     let parts: Vec<&str> = spec.split('-').collect();
     if parts.len() != 2 { return None; }
 
     match (parts[0], parts[1]) {
-        // Suffix: last N bytes, e.g. "bytes=-100"
         ("", n_str) => {
             let n = n_str.parse::<u64>().ok()?;
             if n == 0 || total == 0 { return None; }
-            let n = n.min(total); // if N > total, serve the whole file
+            let n = n.min(total);
             let start = total - n;
             let end = total - 1;
             Some((start, end))
         }
-        // Open-ended: "bytes=start-"
         (start_str, "") => {
             let start = start_str.parse::<u64>().ok()?;
             if start >= total { return None; }
             Some((start, total - 1))
         }
-        // Explicit: "bytes=start-end"
         (start_str, end_str) => {
             let start = start_str.parse::<u64>().ok()?;
             let end = end_str.parse::<u64>().ok()?;
@@ -105,15 +98,11 @@ fn parse_range(h: &str, total: u64) -> Option<(u64, u64)> {
     }
 }
 
-
-
-
 /* ---------- types (private) ---------- */
 
 #[derive(serde::Deserialize)]
 struct ListQuery {
     prefix: Option<String>,
-    // use 0/1 to keep curl simple: &recursive=1 for deep listing
     recursive: Option<u8>,
 }
 
@@ -121,28 +110,24 @@ struct ListQuery {
 struct ListedObject {
     key: String,
     size: u64,
-    modified: u64, // unix seconds
+    modified: u64,
 }
 
 #[derive(serde::Deserialize)]
 struct GetQuery {
-    // download=1 (default) => attachment; download=0 => inline
     download: Option<u8>,
 }
 
-
-
-
-
 /* ---------- handlers (private) ---------- */
 
-// PUT /objects/{key}
 async fn put_object(
     req: HttpRequest,
     state: web::Data<AppState>,
+    cfg: web::Data<Config>,
     key: web::Path<String>,
     mut body: web::Payload,
 ) -> Result<HttpResponse> {
+    println!("→ PUT /{}/{}", PATH_OBJECTS, key);
     let key = key.into_inner();
     let path = resolve_key(&state.root, &key)
         .ok_or_else(|| actix_web::error::ErrorBadRequest("invalid key"))?;
@@ -151,7 +136,6 @@ async fn put_object(
         fs::create_dir_all(parent).await.map_err(actix_web::error::ErrorInternalServerError)?;
     }
 
-    // Overwrite control
     let meta_opt = fs::metadata(&path).await.ok();
     if let Some(h) = req.headers().get(header::IF_NONE_MATCH) {
         if h.to_str().ok().map(|s| s.trim()) == Some("*") && meta_opt.is_some() {
@@ -170,30 +154,39 @@ async fn put_object(
         }
     }
 
-    // Max upload guard (bytes). Example: MAX_UPLOAD_BYTES=10485760  (10 MiB)
-    let max_bytes = std::env::var("MAX_UPLOAD_BYTES").ok().and_then(|s| s.parse::<u64>().ok());
+    if let Some(limit) = cfg.max_upload_bytes {
+        println!("→ MAX_UPLOAD_BYTES set to {} bytes", limit);
 
-    let mut file = File::create(&path)
-        .await
-        .map_err(actix_web::error::ErrorInternalServerError)?;
+        let mut file = File::create(&path)
+            .await
+            .map_err(actix_web::error::ErrorInternalServerError)?;
 
-    let mut received: u64 = 0;
-    while let Some(chunk) = body.next().await {
-        let bytes = chunk.map_err(actix_web::error::ErrorBadRequest)?;
-        received += bytes.len() as u64;
+        let mut received: u64 = 0;
+        while let Some(chunk) = body.next().await {
+            let bytes = chunk.map_err(actix_web::error::ErrorBadRequest)?;
+            received += bytes.len() as u64;
 
-        if let Some(limit) = max_bytes {
             if received > limit {
-                // delete partial and fail with 413
                 drop(file);
                 let _ = fs::remove_file(&path).await;
                 return Err(actix_web::error::ErrorPayloadTooLarge("upload too large"));
             }
-        }
 
-        file.write_all(&bytes)
+            file.write_all(&bytes)
+                .await
+                .map_err(actix_web::error::ErrorInternalServerError)?;
+        }
+    } else {
+        // no limit
+        let mut file = File::create(&path)
             .await
             .map_err(actix_web::error::ErrorInternalServerError)?;
+        while let Some(chunk) = body.next().await {
+            let bytes = chunk.map_err(actix_web::error::ErrorBadRequest)?;
+            file.write_all(&bytes)
+                .await
+                .map_err(actix_web::error::ErrorInternalServerError)?;
+        }
     }
 
     let existed = meta_opt.is_some();
@@ -201,16 +194,12 @@ async fn put_object(
 }
 
 
-
-
-
-
-// HEAD /objects/{key}
 async fn head_object(
     state: web::Data<AppState>,
     key: web::Path<String>,
-    q: web::Query<GetQuery>, // accept same query as GET so download=0|1 works
+    q: web::Query<GetQuery>,
 ) -> Result<HttpResponse> {
+    println!("→ HEAD /{}/{}", PATH_OBJECTS, key);
     let key = key.into_inner();
     let path = resolve_key(&state.root, &key)
         .ok_or_else(|| actix_web::error::ErrorBadRequest("invalid key"))?;
@@ -226,8 +215,7 @@ async fn head_object(
     let etag = make_etag(&meta);
     let ctype = guess_content_type(&key);
 
-    // mirror GET's Content-Disposition behavior
-    let attachment = q.download.unwrap_or(1) != 0; // default: attachment
+    let attachment = q.download.unwrap_or(1) != 0;
     let disp = if attachment { "attachment" } else { "inline" };
     let filename = key.split('/').last().unwrap_or("file");
 
@@ -236,22 +224,17 @@ async fn head_object(
         .append_header(("Content-Length", meta.len().to_string()))
         .append_header(("ETag", etag))
         .append_header(("Accept-Ranges", "bytes"))
-        .append_header((
-            "Content-Disposition",
-            format!("{disp}; filename=\"{filename}\""),
-        ))
+        .append_header(("Content-Disposition", format!("{disp}; filename=\"{filename}\"")))
         .finish())
 }
 
-
-
-// GET /objects/{key} (Range + If-None-Match + inline/attachment toggle)
 async fn get_object(
     req: HttpRequest,
     state: web::Data<AppState>,
     key: web::Path<String>,
-    q: web::Query<GetQuery>, // <-- new
+    q: web::Query<GetQuery>,
 ) -> Result<HttpResponse> {
+    println!("→ GET /{}/{}", PATH_OBJECTS, key);
     let key = key.into_inner();
     let path = resolve_key(&state.root, &key)
         .ok_or_else(|| actix_web::error::ErrorBadRequest("invalid key"))?;
@@ -273,12 +256,10 @@ async fn get_object(
     let total = meta.len();
     let ctype = guess_content_type(&key);
 
-    // NEW: inline vs attachment
-    let attachment = q.download.unwrap_or(1) != 0; // default attachment
+    let attachment = q.download.unwrap_or(1) != 0;
     let disp = if attachment { "attachment" } else { "inline" };
     let filename = key.split('/').last().unwrap_or("file");
 
-    // Range support (single range)
     if let Some(rh) = req.headers().get(header::RANGE) {
         if let Ok(rs) = rh.to_str() {
             if let Some((start, end)) = parse_range(rs, total) {
@@ -292,10 +273,7 @@ async fn get_object(
                     .append_header(("Content-Range", format!("bytes {}-{}/{}", start, end, total)))
                     .append_header(("Accept-Ranges", "bytes"))
                     .append_header(("ETag", etag))
-                    .append_header((
-                        "Content-Disposition",
-                        format!("{disp}; filename=\"{filename}\""),
-                    ))
+                    .append_header(("Content-Disposition", format!("{disp}; filename=\"{filename}\"")))
                     .streaming(stream));
             } else {
                 return Ok(HttpResponse::RangeNotSatisfiable()
@@ -305,7 +283,6 @@ async fn get_object(
         }
     }
 
-    // Full-body streaming
     let file = File::open(&path).await.map_err(actix_web::error::ErrorInternalServerError)?;
     let stream = ReaderStream::new(file);
     Ok(HttpResponse::Ok()
@@ -313,21 +290,15 @@ async fn get_object(
         .append_header(("Content-Length", total.to_string()))
         .append_header(("Accept-Ranges", "bytes"))
         .append_header(("ETag", etag))
-        .append_header((
-            "Content-Disposition",
-            format!("{disp}; filename=\"{filename}\""),
-        ))
+        .append_header(("Content-Disposition", format!("{disp}; filename=\"{filename}\"")))
         .streaming(stream))
 }
 
-
-
-
-// DELETE /objects/{key}
 async fn delete_object(
     state: web::Data<AppState>,
     key: web::Path<String>,
 ) -> Result<HttpResponse> {
+    println!("→ DELETE /{}/{}", PATH_OBJECTS, key);
     let key = key.into_inner();
     let path = resolve_key(&state.root, &key)
         .ok_or_else(|| actix_web::error::ErrorBadRequest("invalid key"))?;
@@ -339,17 +310,14 @@ async fn delete_object(
     }
 }
 
-
-
-
 async fn list_objects(
     state: web::Data<AppState>,
     q: web::Query<ListQuery>,
 ) -> Result<HttpResponse> {
+    println!("→ LIST /{}", PATH_OBJECTS);
     let root = state.root.clone();
     let recursive = q.recursive.unwrap_or(0) != 0;
 
-    // sanitize prefix (rejects .., absolute, etc.)
     let base = if let Some(pref) = q.prefix.as_deref() {
         resolve_key(&root, pref)
             .ok_or_else(|| actix_web::error::ErrorBadRequest("invalid prefix"))?
@@ -359,7 +327,6 @@ async fn list_objects(
 
     let mut out: Vec<ListedObject> = Vec::new();
 
-    // If it's a file, return just that file
     if let Ok(meta) = fs::metadata(&base).await {
         if meta.is_file() {
             let key = base.strip_prefix(&root).unwrap().to_string_lossy().replace('\\', "/");
@@ -371,12 +338,11 @@ async fn list_objects(
         }
     }
 
-    // Walk directory (shallow or recursive)
     let mut stack = vec![base];
     while let Some(dir) = stack.pop() {
         let mut rd = match fs::read_dir(&dir).await {
             Ok(r) => r,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue, // nonexistent prefix → empty list
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
             Err(e) => return Err(actix_web::error::ErrorInternalServerError(e)),
         };
         while let Ok(Some(entry)) = rd.next_entry().await {

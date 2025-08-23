@@ -1,10 +1,10 @@
-// src/main.rs
+// // src/main.rs
 mod routes;
+mod consts;
 
 use actix_web::{web, App, HttpServer};
 use std::path::PathBuf;
-use std::env;
-use std::env::VarError;
+use crate::consts::Config;
 
 #[derive(Clone)]
 pub(crate) struct AppState {
@@ -13,36 +13,37 @@ pub(crate) struct AppState {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    // Root directory for objects (defaults to ./data)
-    let root = match env::var("RUST_BUCKET_DIR") {
-        Ok(v) if !v.is_empty() => v,
-        Ok(_) | Err(VarError::NotPresent) => {
-            eprintln!("RUST_BUCKET_DIR not set or empty; defaulting to ./data");
-            "data".into()
-        }
-        Err(VarError::NotUnicode(_)) => {
-            eprintln!("RUST_BUCKET_DIR is not valid UTF-8; defaulting to ./data");
-            "data".into()
-        }
-    };
+    let cfg = Config::from_env();
 
-    tokio::fs::create_dir_all(&root).await?;
+    tokio::fs::create_dir_all(&cfg.root_dir).await?;
+    let state = AppState { root: PathBuf::from(&cfg.root_dir) };
 
-    let state = AppState { root: PathBuf::from(root) };
+    if let Some(limit) = cfg.max_upload_bytes {
+        println!("📦 MAX_UPLOAD_BYTES = {} bytes", limit);
+    } else {
+        println!("📦 MAX_UPLOAD_BYTES not set (no upload size limit)");
+    }
+
+    println!("📂 RUST_BUCKET_DIR = {}", cfg.root_dir);
 
     println!(
-        "🚀 rust-buck3t on http://0.0.0.0:8080  (root = {})",
+        "🚀 rust-buck3t on http://{}:{}  (root = {})",
+        cfg.host,
+        cfg.port,
         state.root.display()
     );
+
+    // clone cfg for closure use
+    let cfg_clone = cfg.clone();
 
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(state.clone()))
-            // wire your route modules
+            .app_data(web::Data::new(cfg_clone.clone()))
             .configure(routes::health::init)
             .configure(routes::objects::init)
     })
-    .bind(("0.0.0.0", 8080))?
+    .bind((cfg.host.as_str(), cfg.port))?   // use original cfg here
     .run()
     .await
 }

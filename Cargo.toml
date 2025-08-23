@@ -10,6 +10,7 @@ serde = { version = "*", features = ["derive"] }
 tokio = { version = "*", features = ["rt-multi-thread", "macros", "fs", "io-util"] }
 futures-util = "*"
 tokio-util = { version = "*", features = ["io"] }
+dotenvy = "*"
 
 
 

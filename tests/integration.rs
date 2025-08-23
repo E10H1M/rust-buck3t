@@ -4,16 +4,16 @@ use reqwest::{header, Client};
 use std::{net::TcpListener, time::Duration};
 use tempfile::TempDir;
 
-use rust_buck3t::{app, AppState};
+use rust_buck3t::{app, AppState, consts};
 
-fn start_server() -> (String, TempDir) {
+fn start_server(cfg: consts::Config) -> (String, TempDir) {
     let td = TempDir::new().unwrap();
     let state = AppState { root: td.path().into() };
 
     let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let addr = listener.local_addr().unwrap();
 
-    let server = HttpServer::new(move || app(state.clone()))
+    let server = HttpServer::new(move || app(state.clone(), cfg.clone()))
         .listen(listener)
         .unwrap()
         .run();
@@ -38,7 +38,7 @@ async fn wait_alive(base: &str) {
 #[test]
 fn healthz_ok() {
     actix_web::rt::System::new().block_on(async {
-        let (base, _td) = start_server();
+        let (base, _td) = start_server(consts::Config::from_env());
         wait_alive(&base).await;
 
         let resp = Client::new()
@@ -55,7 +55,7 @@ fn healthz_ok() {
 #[test]
 fn put_and_head_inline_attachment() {
     actix_web::rt::System::new().block_on(async {
-        let (base, _td) = start_server();
+        let (base, _td) = start_server(consts::Config::from_env());
         wait_alive(&base).await;
         let client = Client::new();
 
@@ -112,7 +112,7 @@ fn put_and_head_inline_attachment() {
 #[test]
 fn get_full_and_etag_304() {
     actix_web::rt::System::new().block_on(async {
-        let (base, _td) = start_server();
+        let (base, _td) = start_server(consts::Config::from_env());
         wait_alive(&base).await;
         let client = Client::new();
 
@@ -155,7 +155,7 @@ fn get_full_and_etag_304() {
 #[test]
 fn get_range_variants_and_416() {
     actix_web::rt::System::new().block_on(async {
-        let (base, _td) = start_server();
+        let (base, _td) = start_server(consts::Config::from_env());
         wait_alive(&base).await;
         let client = Client::new();
 
@@ -211,7 +211,7 @@ fn get_range_variants_and_416() {
 #[test]
 fn list_prefix_recursive() {
     actix_web::rt::System::new().block_on(async {
-        let (base, _td) = start_server();
+        let (base, _td) = start_server(consts::Config::from_env());
         wait_alive(&base).await;
         let client = Client::new();
 
@@ -266,7 +266,7 @@ fn list_prefix_recursive() {
 #[test]
 fn delete_twice() {
     actix_web::rt::System::new().block_on(async {
-        let (base, _td) = start_server();
+        let (base, _td) = start_server(consts::Config::from_env());
         wait_alive(&base).await;
         let client = Client::new();
 
@@ -297,7 +297,11 @@ fn delete_twice() {
 #[test]
 fn put_overwrite_guards_and_413() {
     actix_web::rt::System::new().block_on(async {
-        let (base, _td) = start_server();
+        // force tiny upload limit
+        let mut cfg = consts::Config::from_env();
+        cfg.max_upload_bytes = Some(1);
+
+        let (base, _td) = start_server(cfg);
         wait_alive(&base).await;
         let client = Client::new();
 
@@ -350,8 +354,7 @@ fn put_overwrite_guards_and_413() {
             .unwrap();
         assert_eq!(bad_match.status(), reqwest::StatusCode::PRECONDITION_FAILED);
 
-        // 413 guard (set very small limit for this request window)
-        std::env::set_var("MAX_UPLOAD_BYTES", "1");
+        // 413 guard should fire
         let too_big = client
             .put(format!("{base}/objects/t/too_big.bin"))
             .body("ab") // 2 bytes > limit 1
@@ -367,6 +370,5 @@ fn put_overwrite_guards_and_413() {
             .await
             .unwrap();
         assert_eq!(get_clean.status(), reqwest::StatusCode::NOT_FOUND);
-        std::env::remove_var("MAX_UPLOAD_BYTES");
     });
 }
