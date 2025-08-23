@@ -1,9 +1,12 @@
+// src/lib.rs
+
 use actix_web::{
     web, App,
     dev::{ServiceRequest, ServiceResponse},
     body::MessageBody,
     Error,
 };
+pub mod consts; 
 mod routes;
 use std::path::PathBuf;
 
@@ -14,6 +17,7 @@ pub struct AppState {
 
 pub fn app(
     state: AppState,
+    cfg: consts::Config,
 ) -> App<
     impl actix_service::ServiceFactory<
         ServiceRequest,
@@ -25,16 +29,11 @@ pub fn app(
 > {
     App::new()
         .app_data(web::Data::new(state))
+        .app_data(web::Data::new(cfg))
         .configure(routes::health::init)
         .configure(routes::objects::init)
 }
 
-
-
-
-// ---------------------------
-// Unit tests go here
-// ---------------------------
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -43,7 +42,8 @@ mod tests {
     #[actix_web::test]
     async fn app_builds_and_healthz_works() {
         let state = AppState { root: PathBuf::from("/tmp") };
-        let app = test::init_service(app(state)).await;
+        let cfg = consts::Config::from_env();
+        let app = test::init_service(app(state, cfg)).await;
 
         let req = test::TestRequest::get().uri("/healthz").to_request();
         let resp = test::call_service(&app, req).await;
