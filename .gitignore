@@ -19,6 +19,7 @@ Cargo.lock
 
 # ---- OUTPUT DIR ------------------------------------------
 /data
+/auth
 # ---- Testing, Coverage, Profiling ------------------------------------------
 
 # LLVM source-based coverage
