@@ -7,6 +7,7 @@ use actix_web::{
     Error,
 };
 pub mod consts; 
+pub mod auth;
 mod routes;
 use std::path::PathBuf;
 
@@ -32,6 +33,7 @@ pub fn app(
         .app_data(web::Data::new(cfg))
         .configure(routes::health::init)
         .configure(routes::objects::init)
+        .configure(routes::session::init)
 }
 
 #[cfg(test)]
