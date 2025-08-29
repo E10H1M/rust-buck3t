@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>rust-buck3t-ui docs</title>
+  <link rel="stylesheet" href="css/style.css"> 
+</head>
+<body>
+
+  <nav id="sidebar">
+    <a onclick="loadPage('pages/home.html')">Home</a>
+    <a onclick="loadPage('pages/install-rust.html')">Installing Rust</a>
+  </nav>
+
+    
+  <div id="docs">
+    <h1>rust-buck3t</h1>
+
+
+    <section id="features">
+      <div class="feature-grid">
+          <div class="feature">
+              <a href="https://github.com/E10H1M/rust-buck3t" target="_blank" rel="noopener noreferrer">
+                <img src="static/rusty_ol_bucket.webp" alt="logo">
+              </a>
+              <p>[decentralize.] 🫵🏽</p>
+          </div>
+          <div class="feature">
+              <img src="static/src.png" alt="directory">
+          </div>
+      </div>
+    </section>
+
+
+    <div id="content">
+      <!-- default load -->
+      <p>Loading...</p>
+    </div>
+  </div>
+
+<script>
+  function loadPage(path) {
+    fetch(path)
+      .then(resp => resp.text())
+      .then(html => {
+        document.getElementById("content").innerHTML = html;
+
+        // --- FEATURE TOGGLE ---
+        const feature = document.querySelector(".feature:nth-child(2)");
+        if (feature) {
+          feature.classList.add("anim");
+          if (path.includes("install-rust")) {
+            feature.classList.add("move-left");
+          } else {
+            feature.classList.remove("move-left");
+          }
+          feature.addEventListener("transitionend", () => {
+            feature.classList.remove("anim");
+          }, { once: true });
+        }
+
+        // --- NAV ACTIVE STATE ---
+        document.querySelectorAll("#sidebar a").forEach(link => {
+          link.classList.remove("active");
+          if (link.getAttribute("onclick").includes(path)) {
+            link.classList.add("active");
+          }
+        });
+      })
+      .catch(err => {
+        document.getElementById("content").innerHTML = "<p>Error loading page.</p>";
+        console.error(err);
+      });
+  }
+
+  // load Home by default *and* highlight Home link
+  window.addEventListener("DOMContentLoaded", () => {
+    loadPage("pages/home.html");
+  });
+</script>
+
+
+</body>
+</html>

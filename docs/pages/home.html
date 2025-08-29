@@ -1,0 +1,80 @@
+<section id="about">
+  <h2>About</h2>
+  <p><strong>rust-buck3t</strong> is an Actix-based object store that serves files from a local directory.
+  It supports PUT/GET/HEAD/DELETE with ETag, Range requests, and optional JWT (HS256) auth with route-level scopes.</p>
+</section>
+
+<section id="clone">
+  <h2>Clone</h2>
+  <pre><code>git clone https://github.com/E10H1M/rust-buck3t.git
+cd rust-buck3t
+cargo build</code></pre>
+</section>
+
+<section id="config">
+  <h2>Configuration (.env)</h2>
+  <p>Create a <code>.env</code> in the repo root:</p>
+  <pre><code>HOST=0.0.0.0
+RUST_BUCKET_DIR="./data"
+PORT=8080
+MAX_UPLOAD_BYTES=10485760
+
+AUTH_MAX_TTL_SECS=900
+AUTH_MODE=jwt_hs256
+AUTH_WRITE=true
+AUTH_READ=true
+AUTH_LIST=true
+JWT_SCOPES_WRITE=obj:write
+JWT_SCOPES_READ=obj:read
+JWT_SCOPES_LIST=obj:list
+JWT_HS_SECRET=devsecret
+AUTH_USER_DB=./auth/users.json</code></pre>
+
+  <ul>
+    <li><code>AUTH_MODE</code>: <code>jwt_hs256</code> (recommended) or <code>off</code> (dev only).</li>
+    <li>Scopes gate routes:
+      <code>write</code> → PUT/DELETE, <code>read</code> → GET/HEAD, <code>list</code> → list endpoints.</li>
+    <li><code>AUTH_MAX_TTL_SECS</code> clamps login token lifetimes.</li>
+    <li><code>JWT_HS_SECRET</code> is required for HS256.</li>
+    <li><code>AUTH_USER_DB</code> is a dev JSON file for signup/login.</li>
+    <li><code>(standard DB is coming. Still deciding which one.)</li>
+  </ul>
+</section>
+
+<section id="run">
+  <h2>Run</h2>
+  <pre><code>cargo run</code></pre>
+  <p>Default server: <code>http://127.0.0.1:8080</code>.</p>
+</section>
+
+<section id="routes">
+  <h2>Routes</h2>
+  <h3>Health</h3>
+  <ul>
+    <li><code>GET /healthz</code></li>
+  </ul>
+  <h3>Auth (dev)</h3>
+  <ul>
+    <li><code>POST /auth/signup</code></li>
+    <li><code>POST /auth/login</code> → returns <code>{ access_token, token_type, expires_in }</code></li>
+    <li><code>POST /auth/logout</code> (stateless)</li>
+  </ul>
+  <h3>Objects</h3>
+  <ul>
+    <li><code>GET /objects</code> — list. Query: <code>?prefix=</code>, <code>?recursive=1</code></li>
+    <li><code>PUT /objects/{key}</code> — upload (binary-safe, size limited by <code>MAX_UPLOAD_BYTES</code>)</li>
+    <li><code>HEAD /objects/{key}</code> — metadata (ETag, length, etc.)</li>
+    <li><code>GET /objects/{key}</code> — supports <code>Range</code>, <code>If-None-Match</code>, and <code>?download=0|1</code></li>
+    <li><code>DELETE /objects/{key}</code></li>
+  </ul>
+</section>
+
+<section id="auth-notes">
+  <h2>Auth Notes</h2>
+  <ul>
+    <li>Send <code>Authorization: Bearer &lt;token&gt;</code> to access protected routes.</li>
+    <li>Tokens include <code>exp</code> and are validated server-side; requested TTL is clamped by <code>AUTH_MAX_TTL_SECS</code>.</li>
+    <li>Scopes can come from <code>scope</code> (space-delimited), <code>scopes</code> (array), or <code>scp</code>.</li>
+  </ul>
+</section>
+

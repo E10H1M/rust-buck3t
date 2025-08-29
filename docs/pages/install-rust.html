@@ -1,0 +1,24 @@
+<section id="requirements">
+  <h2>Installing the requirements</h2>
+  <p>Some requirements for Linux:</p>
+  <pre><code>sudo apt update
+sudo apt install pkg-config libssl-dev</code></pre>
+</section>
+
+<section id="install">
+  <h2>Install Rust</h2>
+  <p>Run the following command to install Rust via <a href="https://www.rust-lang.org/tools/install" target="_blank">rustup</a>:</p>
+  <pre><code>curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh</code></pre>
+</section>
+
+<section id="path">
+  <h2>Add Rust to your PATH (in the same terminal when installation finishes)</h2>
+  <pre><code>. "$HOME/.cargo/env"</code></pre>
+</section>
+
+<section id="verify">
+  <h2>Verify Installation</h2>
+  <p>Restart your shell and run:</p>
+  <pre><code>rustc --version
+cargo --version</code></pre>
+</section>
