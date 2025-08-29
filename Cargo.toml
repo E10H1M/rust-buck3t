@@ -4,17 +4,25 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
+# Actix web server
 actix-web = "*"
 actix-service = "*"
+
+# Serde + JSON
 serde = { version = "*", features = ["derive"] }
-tokio = { version = "*", features = ["rt-multi-thread", "macros", "fs", "io-util"] }
+serde_json = "*"
+
+# Tokio runtime + utils
+tokio = { version = "*", features = ["rt-multi-thread", "macros", "fs", "io-util", "time"] }
 futures-util = "*"
 tokio-util = { version = "*", features = ["io"] }
 dotenvy = "*"
 
-
+# Auth
+jsonwebtoken = "*"   # HS256 + RS256 support
+awc = { version = "*", features = ["rustls"] }  # Actix HTTP client for JWKS
 
 [dev-dependencies]
-reqwest = { version = "*", features = ["json"] }  # HTTP client for integration tests
-serde_json = "*"                                  # parse JSON from /objects listing
-tempfile = "*"                                    # temp dirs for isolated RUST_BUCKET_DIR
+# For integration tests only
+reqwest = { version = "*", features = ["json", "rustls-tls"] }
+tempfile = "*"

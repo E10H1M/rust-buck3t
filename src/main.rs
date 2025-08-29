@@ -1,14 +1,25 @@
-// // src/main.rs
-mod routes;
-mod consts;
-
-use actix_web::{web, App, HttpServer};
+// src/main.rs
+use actix_web::HttpServer;
 use std::path::PathBuf;
-use crate::consts::Config;
 
-#[derive(Clone)]
-pub(crate) struct AppState {
-    pub root: PathBuf,
+use rust_buck3t::consts::Config;
+use rust_buck3t::{app, AppState};
+
+fn banner(cfg: &Config, state_root: &PathBuf) {
+    if let Some(limit) = cfg.max_upload_bytes {
+        println!("📦 MAX_UPLOAD_BYTES = {} bytes", limit);
+    } else {
+        println!("📦 MAX_UPLOAD_BYTES not set (no upload size limit)");
+    }
+    println!("📂 RUST_BUCKET_DIR = {}", cfg.root_dir);
+    println!("   • auth_max_ttl_secs: {}s", cfg.auth_max_ttl_secs);
+    println!(
+        "🚀 rust-buck3t on http://{}:{}  (root = {})",
+        cfg.host,
+        cfg.port,
+        state_root.display()
+    );
+    cfg.log_auth_banner(&cfg.host, cfg.port);
 }
 
 #[actix_web::main]
@@ -18,32 +29,19 @@ async fn main() -> std::io::Result<()> {
     tokio::fs::create_dir_all(&cfg.root_dir).await?;
     let state = AppState { root: PathBuf::from(&cfg.root_dir) };
 
-    if let Some(limit) = cfg.max_upload_bytes {
-        println!("📦 MAX_UPLOAD_BYTES = {} bytes", limit);
-    } else {
-        println!("📦 MAX_UPLOAD_BYTES not set (no upload size limit)");
-    }
+    banner(&cfg, &state.root);
 
-    println!("📂 RUST_BUCKET_DIR = {}", cfg.root_dir);
-
-    println!(
-        "🚀 rust-buck3t on http://{}:{}  (root = {})",
-        cfg.host,
-        cfg.port,
-        state.root.display()
-    );
-
-    // clone cfg for closure use
-    let cfg_clone = cfg.clone();
+    // prepare separate values for the closure and for bind()
+    let cfg_for_server = cfg.clone();
+    let state_for_server = state.clone();
+    let bind_host = cfg.host.clone();
+    let bind_port = cfg.port;
 
     HttpServer::new(move || {
-        App::new()
-            .app_data(web::Data::new(state.clone()))
-            .app_data(web::Data::new(cfg_clone.clone()))
-            .configure(routes::health::init)
-            .configure(routes::objects::init)
+        // use the cloned copies inside the closure
+        app(state_for_server.clone(), cfg_for_server.clone())
     })
-    .bind((cfg.host.as_str(), cfg.port))?   // use original cfg here
+    .bind((bind_host.as_str(), bind_port))?
     .run()
     .await
 }

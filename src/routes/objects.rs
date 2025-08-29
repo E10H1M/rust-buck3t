@@ -1,4 +1,4 @@
-// routes/objects.rs
+// // routes/objects.rs
 
 use actix_web::{http::header, web, HttpRequest, HttpResponse, Result};
 use futures_util::StreamExt;
@@ -12,6 +12,7 @@ use tokio_util::io::ReaderStream;
 
 use crate::{AppState, consts::Config};
 use crate::consts::PATH_OBJECTS;
+use crate::auth::{NeedWrite, NeedRead, NeedList}; // ← add
 
 pub(crate) fn init(cfg: &mut web::ServiceConfig) {
     cfg
@@ -121,6 +122,7 @@ struct GetQuery {
 /* ---------- handlers (private) ---------- */
 
 async fn put_object(
+    _auth: NeedWrite,                 // ← enforce write
     req: HttpRequest,
     state: web::Data<AppState>,
     cfg: web::Data<Config>,
@@ -195,6 +197,7 @@ async fn put_object(
 
 
 async fn head_object(
+    _auth: NeedRead,                  // ← enforce read
     state: web::Data<AppState>,
     key: web::Path<String>,
     q: web::Query<GetQuery>,
@@ -229,6 +232,7 @@ async fn head_object(
 }
 
 async fn get_object(
+    _auth: NeedRead,                  // ← enforce read
     req: HttpRequest,
     state: web::Data<AppState>,
     key: web::Path<String>,
@@ -295,6 +299,7 @@ async fn get_object(
 }
 
 async fn delete_object(
+    _auth: NeedWrite,                 // ← enforce write
     state: web::Data<AppState>,
     key: web::Path<String>,
 ) -> Result<HttpResponse> {
@@ -311,6 +316,7 @@ async fn delete_object(
 }
 
 async fn list_objects(
+    _auth: NeedList,                  // ← enforce list
     state: web::Data<AppState>,
     q: web::Query<ListQuery>,
 ) -> Result<HttpResponse> {
