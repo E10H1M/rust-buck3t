@@ -7,6 +7,7 @@ Minimal deps, S3-ish behavior (ETag, Range, streaming).  <br>
 
 
 ## Docs
+[![Documentation](https://img.shields.io/badge/docs-rust--buck3t-green)](https://e10h1m.github.io/rust-buck3t/)
 [![Documentation](https://img.shields.io/badge/docs-rust--buck3t--ui-blue)](https://e10h1m.github.io/rust-buck3t-ui/)
 [![Actix](https://img.shields.io/badge/docs-actix-brown)](https://actix.rs/)
 
